@@ -32,6 +32,7 @@ class LocalUpdate(object):
         self.device = 'cuda' if args.gpu else 'cpu'
         # Default criterion set to NLL loss function
         self.criterion = nn.NLLLoss().to(self.device)
+       
 
     def train_val_test(self, dataset, idxs):
         """
@@ -51,7 +52,7 @@ class LocalUpdate(object):
                                 batch_size=int(len(idxs_test)/10), shuffle=False)
         return trainloader, validloader, testloader
 
-    def update_weights(self, model, global_round):
+    def update_weights(self, model, global_round,idxnum,badnum):
         # Set mode to train model
         model.train()
         epoch_loss = []
@@ -71,20 +72,37 @@ class LocalUpdate(object):
 
                 model.zero_grad()
                 log_probs = model(images)
+                
+                
+                #to set weight to 1 for a bad user
+                #set there has 10 bad users
+                if badnum!=0:
+                    if idxnum>0 and idxnum<=badnum:
+                        model.state_dict()['conv1.weight'].data.fill_(1)
+                        model.state_dict()['conv2.weight'].data.fill_(1)
+                
                 loss = self.criterion(log_probs, labels)
                 loss.backward()
                 optimizer.step()
+                
+               
 
+               
+                #每做10次print一次
                 if self.args.verbose and (batch_idx % 10 == 0):
                     print('| Global Round : {} | Local Epoch : {} | [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                         global_round, iter, batch_idx * len(images),
                         len(self.trainloader.dataset),
                         100. * batch_idx / len(self.trainloader), loss.item()))
+        
                 self.logger.add_scalar('loss', loss.item())
                 batch_loss.append(loss.item())
+                
             epoch_loss.append(sum(batch_loss)/len(batch_loss))
-
+       
         return model.state_dict(), sum(epoch_loss) / len(epoch_loss)
+    
+    
 
     def inference(self, model):
         """ Returns the inference accuracy and loss.
